@@ -55,7 +55,7 @@ D. 読者の前のめり感を引き出すフック
 """
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0.3,

@@ -206,6 +206,15 @@ elif st.session_state.step == 2:
     st.subheader("核となる洞察")
     st.info(research.get("key_insight", ""))
 
+    # Google検索で実際に参照したURL
+    if research.get("sources"):
+        with st.expander(f"🔗 検索で参照した情報源（{len(research['sources'])}件）"):
+            for src in research["sources"]:
+                title = src.get("title", "")
+                uri = src.get("uri", "")
+                if uri:
+                    st.markdown(f"- [{title or uri}]({uri})")
+
     st.subheader("ONE HACK要素（編集可能）")
     col1, col2 = st.columns(2)
     with col1:

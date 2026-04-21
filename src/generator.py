@@ -141,7 +141,7 @@ K（Key）: 小さな一歩を提案して着地。
 """
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         contents=system_prompt + "\n\n" + user_prompt,
         config=types.GenerateContentConfig(
             temperature=0.8,
