@@ -120,6 +120,38 @@ if st.session_state.step == 1:
         height=100,
     )
 
+    with st.expander("✏️ 自分のプロフィール（任意）— 入力すると記事に反映されます"):
+        st.caption("入力すると、あなたの活動や過去の体験を元に記事が再構築されます。")
+        author_identity = st.text_area(
+            "あなたは何者で、どういったことを発信しているか",
+            placeholder="例: 元銀行員のキャリアコーチ。30代女性向けに、お金と仕事の両立を発信している。",
+            height=80,
+            key="author_identity",
+        )
+        author_pain = st.text_area(
+            "過去にどんな悩み・痛みを経験したか",
+            placeholder="例: 銀行時代に過労で体を壊し、人生を見直した。お金のために自分を殺していた経験がある。",
+            height=80,
+            key="author_pain",
+        )
+
+    st.subheader("記事ジャンル")
+    genre_label = st.radio(
+        "ジャンル（リサーチ方針が変わります）",
+        options=[
+            "心理学・ビジネス系（エビデンス重視）",
+            "スピリチュアル・直感系（物語・未科学を扱う）",
+            "エッセイ・日常系（個人視点・情緒重視）",
+        ],
+        index=0,
+        help="ジャンルによってリサーチ対象と文体が変わります",
+    )
+    genre = {
+        "心理学・ビジネス系（エビデンス重視）": "psychology",
+        "スピリチュアル・直感系（物語・未科学を扱う）": "spiritual",
+        "エッセイ・日常系（個人視点・情緒重視）": "essay",
+    }[genre_label]
+
     st.subheader("トーン設定")
     col1, col2 = st.columns(2)
 
@@ -166,12 +198,15 @@ if st.session_state.step == 1:
         elif not persona:
             st.error("ペルソナを入力してください。")
         else:
-            with st.spinner("海外のエビデンスをリサーチ中..."):
+            with st.spinner("リサーチ中..."):
                 try:
-                    research = research_topic(concept, persona, api_key)
+                    research = research_topic(concept, persona, api_key, genre=genre)
                     st.session_state.research = research
                     st.session_state.concept = concept
                     st.session_state.persona = persona
+                    st.session_state.genre = genre
+                    st.session_state.author_identity = author_identity
+                    st.session_state.author_pain = author_pain
                     st.session_state.tone_aggressive = tone_aggressive
                     st.session_state.tone_blunt = tone_blunt == "グサッと言い切る"
                     st.session_state.writer_style = writer_style
@@ -248,6 +283,9 @@ elif st.session_state.step == 2:
                         word_count=st.session_state.word_count,
                         writer_style=st.session_state.writer_style,
                         api_key=st.session_state.get("_api_key", ""),
+                        genre=st.session_state.get("genre", "psychology"),
+                        author_identity=st.session_state.get("author_identity", ""),
+                        author_pain=st.session_state.get("author_pain", ""),
                     )
                     st.session_state.article = article
 
@@ -397,6 +435,9 @@ elif st.session_state.step == 3:
                         word_count=st.session_state.word_count,
                         writer_style=st.session_state.writer_style,
                         api_key=st.session_state.get("_api_key", ""),
+                        genre=st.session_state.get("genre", "psychology"),
+                        author_identity=st.session_state.get("author_identity", ""),
+                        author_pain=st.session_state.get("author_pain", ""),
                     )
                     st.session_state.article = article
                     quality = check_quality(
