@@ -89,6 +89,7 @@ def generate_article(
     genre: str = "psychology",
     author_identity: str = "",
     author_pain: str = "",
+    ctas: list = None,
 ) -> dict:
     """ONE HACK構成 + ジャンル別トーンで記事を生成。"""
     client = genai.Client(api_key=api_key)
@@ -124,6 +125,37 @@ def generate_article(
 ★ただし、自己アピールにならないように。「私の経験から言うと…」程度の自然な織り込み方で。
 """
 
+    cta_instruction = ""
+    if ctas:
+        cta_blocks = []
+        for cta in ctas:
+            cta_blocks.append(
+                f"- 【{cta['position']}に配置】\n"
+                f"  ラベル: {cta['label']}\n"
+                f"  URL: {cta['url']}\n"
+                f"  説明: {cta.get('description', '')}"
+            )
+        cta_instruction = f"""【★CTA・誘導リンクの挿入 — 必ず指定位置に挿入】
+以下のCTAを記事の指定位置に**必ず**挿入してください。
+
+{chr(10).join(cta_blocks)}
+
+【挿入のルール】
+- 「冒頭」: 自己紹介の直後、本論に入る前
+- 「中盤」: 問題提起から解決策に移る境目（A→Cの間）
+- 「末尾」: 記事の締めの直前
+- ラベルは前後の文脈に**自然に繋げる**こと（押し売り感を出さない）
+- 形式は以下のように、ラベル文 → URL を改行で記載:
+
+  ---
+  {{ラベル文}}
+  → {{URL}}
+  ---
+
+- 補足説明があれば、URLの直後に1行で添える
+- 流れを切らないよう、CTA前後で文章を繋ぐ一文を入れる
+"""
+
     system_prompt = f"""あなたは超一流のコピーライターです。以下のナレッジに基づいて記事を書きます。
 
 【構成モデル — ONE HACK】
@@ -139,6 +171,8 @@ def generate_article(
 {style_instruction}
 
 {author_instruction}
+
+{cta_instruction}
 
 【★H→A→C→Kの流れを厳密に守ること。ラベルは出さない★】
 【★文体の禁止事項】

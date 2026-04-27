@@ -135,6 +135,44 @@ if st.session_state.step == 1:
             key="author_pain",
         )
 
+    with st.expander("📌 CTA・誘導リンク（任意）— Instagram、LP、リードマグネット等"):
+        st.caption("最大3つまで登録できます。AIが記事の指定位置に自然に織り込みます。")
+        ctas = []
+        for i in range(1, 4):
+            st.markdown(f"**CTA {i}**")
+            c1, c2 = st.columns([2, 1])
+            with c1:
+                label = st.text_input(
+                    f"ラベル（誘導文）",
+                    placeholder="例: 公式LINEで電子書籍を無料プレゼント中",
+                    key=f"cta_label_{i}",
+                )
+            with c2:
+                position = st.selectbox(
+                    f"配置位置",
+                    options=["使わない", "冒頭", "中盤", "末尾"],
+                    index=0,
+                    key=f"cta_pos_{i}",
+                )
+            url = st.text_input(
+                f"URL",
+                placeholder="https://...",
+                key=f"cta_url_{i}",
+            )
+            description = st.text_input(
+                f"説明（補足・任意）",
+                placeholder="例: 登録者限定で個別相談も可",
+                key=f"cta_desc_{i}",
+            )
+            if label and url and position != "使わない":
+                ctas.append({
+                    "label": label,
+                    "url": url,
+                    "description": description,
+                    "position": position,
+                })
+            st.divider()
+
     st.subheader("記事ジャンル")
     genre_label = st.radio(
         "ジャンル（リサーチ方針が変わります）",
@@ -207,6 +245,7 @@ if st.session_state.step == 1:
                     st.session_state.genre = genre
                     st.session_state.author_identity = author_identity
                     st.session_state.author_pain = author_pain
+                    st.session_state.ctas = ctas
                     st.session_state.tone_aggressive = tone_aggressive
                     st.session_state.tone_blunt = tone_blunt == "グサッと言い切る"
                     st.session_state.writer_style = writer_style
@@ -286,6 +325,7 @@ elif st.session_state.step == 2:
                         genre=st.session_state.get("genre", "psychology"),
                         author_identity=st.session_state.get("author_identity", ""),
                         author_pain=st.session_state.get("author_pain", ""),
+                        ctas=st.session_state.get("ctas", []),
                     )
                     st.session_state.article = article
 
@@ -438,6 +478,7 @@ elif st.session_state.step == 3:
                         genre=st.session_state.get("genre", "psychology"),
                         author_identity=st.session_state.get("author_identity", ""),
                         author_pain=st.session_state.get("author_pain", ""),
+                        ctas=st.session_state.get("ctas", []),
                     )
                     st.session_state.article = article
                     quality = check_quality(
