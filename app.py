@@ -86,6 +86,10 @@ with st.sidebar:
         st.info("Gemini API Keyを入力してください。\n\n[Google AI Studio](https://aistudio.google.com/apikey) で無料取得できます。")
 
     st.divider()
+    st.markdown("📖 **使い方マニュアル**")
+    st.markdown("- [APIキー取得・設定マニュアル](https://github.com/atsushi0706/note-writer-tool/blob/master/docs/GEMINI_API_KEY_GUIDE.md)")
+    st.markdown("- [README（概要・使い方）](https://github.com/atsushi0706/note-writer-tool/blob/master/README.md)")
+    st.divider()
     st.caption("Gemini 2.5 Flash（無料枠）+ Google検索で動作")
     st.caption("ONE HACKモデルで構成")
 
@@ -135,16 +139,16 @@ if st.session_state.step == 1:
             key="author_pain",
         )
 
-    with st.expander("📌 CTA・誘導リンク（任意）— Instagram、LP、リードマグネット等"):
-        st.caption("最大3つまで登録できます。AIが記事の指定位置に自然に織り込みます。")
+    with st.expander("📌 CTA・誘導文（任意）— Instagram、LP、リードマグネット等への誘導"):
+        st.caption("最大3つまで登録できます。AIが記事の指定位置に**誘導文だけ**を自然に織り込みます。リンクは各自noteで手動で貼ってください。")
         ctas = []
         for i in range(1, 4):
             st.markdown(f"**CTA {i}**")
             c1, c2 = st.columns([2, 1])
             with c1:
                 label = st.text_input(
-                    f"ラベル（誘導文）",
-                    placeholder="例: 公式LINEで電子書籍を無料プレゼント中",
+                    f"誘導文（記事に挿入されるフレーズ）",
+                    placeholder="例: 公式LINEで電子書籍プレゼント中／詳しくはInstagramで／プロフィールのリンクから",
                     key=f"cta_label_{i}",
                 )
             with c2:
@@ -154,21 +158,9 @@ if st.session_state.step == 1:
                     index=0,
                     key=f"cta_pos_{i}",
                 )
-            url = st.text_input(
-                f"URL",
-                placeholder="https://...",
-                key=f"cta_url_{i}",
-            )
-            description = st.text_input(
-                f"説明（補足・任意）",
-                placeholder="例: 登録者限定で個別相談も可",
-                key=f"cta_desc_{i}",
-            )
-            if label and url and position != "使わない":
+            if label and position != "使わない":
                 ctas.append({
                     "label": label,
-                    "url": url,
-                    "description": description,
                     "position": position,
                 })
             st.divider()
