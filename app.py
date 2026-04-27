@@ -12,6 +12,7 @@ from pathlib import Path
 from src.researcher import research_topic
 from src.generator import generate_article
 from src.quality_checker import check_quality
+from src.concept_suggester import suggest_concepts, refine_concept_chat
 
 # --- ページ設定 ---
 st.set_page_config(
@@ -55,6 +56,10 @@ if "article" not in st.session_state:
     st.session_state.article = None
 if "quality" not in st.session_state:
     st.session_state.quality = None
+if "concept_messages" not in st.session_state:
+    st.session_state.concept_messages = []
+if "concept_suggestions" not in st.session_state:
+    st.session_state.concept_suggestions = None
 
 
 # --- ヘッダー ---
@@ -110,34 +115,128 @@ with st.sidebar:
 # STEP 1: 入力
 # ========================================
 if st.session_state.step == 1:
-    st.header("① コンセプトとペルソナを入力")
 
-    concept = st.text_area(
-        "今日書きたいコンセプト",
-        placeholder="例: 完璧主義の人ほど先延ばしをしてしまう理由",
-        height=100,
+    # ========== ① プロフィール（最上部・推奨） ==========
+    st.header("① あなたのプロフィール")
+    st.caption("入力するとAIがコンセプト案を提案します。記事にも反映されます。")
+
+    author_identity = st.text_area(
+        "あなたは何者で、どういったことを発信しているか",
+        placeholder="例: 元銀行員のキャリアコーチ。30代女性向けに、お金と仕事の両立を発信している。",
+        height=80,
+        key="author_identity",
+    )
+    author_pain = st.text_area(
+        "過去にどんな悩み・痛みを経験したか",
+        placeholder="例: 銀行時代に過労で体を壊し、人生を見直した。お金のために自分を殺していた経験がある。",
+        height=80,
+        key="author_pain",
     )
 
+    st.divider()
+
+    # ========== ② コンセプト（AI提案 or 自分で入力） ==========
+    st.header("② 今日書きたいコンセプト")
+
+    concept_mode = st.radio(
+        "コンセプトの決め方",
+        ["💡 AIに相談しながら決める（神田昌典・ダイレクト出版視点）", "✍️ 自分で入力する"],
+        index=0,
+        horizontal=False,
+    )
+
+    concept = ""
+
+    if concept_mode == "✍️ 自分で入力する":
+        concept = st.text_area(
+            "今日書きたいコンセプト",
+            placeholder="例: 完璧主義の人ほど先延ばしをしてしまう理由",
+            height=100,
+        )
+    else:
+        # AI相談モード
+        st.caption("プロフィールを入力 → 「コンセプト案を出す」ボタン → 気になる案があればそのまま採用 or チャットで深掘り")
+
+        # 初回提案ボタン
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button(
+                "🎯 コンセプト案を出してもらう",
+                use_container_width=True,
+                disabled=not (api_key and author_identity),
+            ):
+                with st.spinner("神田昌典・ダイレクト出版視点でコンセプトを練っています..."):
+                    try:
+                        suggestions = suggest_concepts(author_identity, author_pain, api_key)
+                        st.session_state.concept_suggestions = suggestions
+                        # チャットの最初のメッセージとして整形して保存
+                        intro = f"プロフィールから {len(suggestions)} 個のコンセプト案を出しました。気になる案があれば「案2でいきたい」のように伝えてください。別の角度から考えたい場合は遠慮なく言ってください。\n\n"
+                        for i, s in enumerate(suggestions, 1):
+                            intro += f"\n**案{i}: {s['title']}**\n"
+                            intro += f"- フック: {s['hook']}\n"
+                            intro += f"- 痛み: {s['target_pain']}\n"
+                            intro += f"- 約束: {s['promise']}\n"
+                            intro += f"- 独自性: {s['why_unique']}\n"
+                        st.session_state.concept_messages = [
+                            {"role": "assistant", "content": intro}
+                        ]
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"提案に失敗しました: {e}")
+        with col_btn2:
+            if st.button("🔄 チャットをリセット", use_container_width=True):
+                st.session_state.concept_messages = []
+                st.session_state.concept_suggestions = None
+                st.rerun()
+
+        # チャット表示
+        if st.session_state.concept_messages:
+            st.markdown("**💬 AIとの相談**")
+            for msg in st.session_state.concept_messages:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+
+            # ユーザー入力
+            user_msg = st.chat_input("「案3を女性向けにアレンジして」「もう少しスピリチュアル寄りに」など")
+            if user_msg:
+                st.session_state.concept_messages.append({"role": "user", "content": user_msg})
+                with st.spinner("考え中..."):
+                    try:
+                        response = refine_concept_chat(
+                            st.session_state.concept_messages,
+                            author_identity,
+                            author_pain,
+                            api_key,
+                        )
+                        st.session_state.concept_messages.append({"role": "assistant", "content": response})
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"応答取得に失敗しました: {e}")
+
+        # 確定したコンセプトを入力
+        if st.session_state.concept_messages:
+            st.markdown("---")
+            concept = st.text_area(
+                "✅ 上の会話で決まったコンセプトをここに記入してリサーチに進みます",
+                placeholder="例: 受け取れない人が抱えている「与え続ける症候群」の正体",
+                height=80,
+                key="finalized_concept",
+            )
+
+    st.divider()
+
+    # ========== ③ ペルソナ ==========
+    st.header("③ 届けたいペルソナ")
     persona = st.text_area(
-        "届けたいペルソナ（誰に向けて書くか）",
+        "誰に向けて書くか",
         placeholder="例: 30代女性、フリーランスのWebデザイナー。仕事は順調だが、なぜか自己肯定感が低い。",
         height=100,
     )
 
-    with st.expander("✏️ 自分のプロフィール（任意）— 入力すると記事に反映されます"):
-        st.caption("入力すると、あなたの活動や過去の体験を元に記事が再構築されます。")
-        author_identity = st.text_area(
-            "あなたは何者で、どういったことを発信しているか",
-            placeholder="例: 元銀行員のキャリアコーチ。30代女性向けに、お金と仕事の両立を発信している。",
-            height=80,
-            key="author_identity",
-        )
-        author_pain = st.text_area(
-            "過去にどんな悩み・痛みを経験したか",
-            placeholder="例: 銀行時代に過労で体を壊し、人生を見直した。お金のために自分を殺していた経験がある。",
-            height=80,
-            key="author_pain",
-        )
+    st.divider()
+
+    # ========== ④ オプション設定 ==========
+    st.header("④ オプション設定")
 
     with st.expander("📌 CTA・誘導文（任意）— Instagram、LP、リードマグネット等への誘導"):
         st.caption("最大3つまで登録できます。AIが記事の指定位置に**誘導文だけ**を自然に織り込みます。リンクは各自noteで手動で貼ってください。")
