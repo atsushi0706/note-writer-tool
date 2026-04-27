@@ -86,7 +86,7 @@ with st.sidebar:
         st.info("Gemini API Keyを入力してください。\n\n[Google AI Studio](https://aistudio.google.com/apikey) で無料取得できます。")
 
     st.divider()
-    st.caption("Gemini 2.0 Flash（無料枠）で動作")
+    st.caption("Gemini 2.5 Flash（無料枠）+ Google検索で動作")
     st.caption("ONE HACKモデルで構成")
 
     # API Keyをセッションに保存
