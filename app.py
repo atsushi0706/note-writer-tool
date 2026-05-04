@@ -286,33 +286,41 @@ if st.session_state.step == 1:
 
         # チャット表示
         if st.session_state.concept_messages:
-            st.markdown("**💬 AIとの相談**")
-            for msg in st.session_state.concept_messages:
-                with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
+            with st.container(border=True):
+                st.markdown("**💬 AIとの相談ログ**")
+                for msg in st.session_state.concept_messages:
+                    with st.chat_message(msg["role"]):
+                        st.markdown(msg["content"])
 
-            # ユーザー入力
-            user_msg = st.chat_input("「案3を女性向けにアレンジして」「もう少しスピリチュアル寄りに」など")
-            if user_msg:
-                st.session_state.concept_messages.append({"role": "user", "content": user_msg})
-                with st.spinner("考え中..."):
-                    try:
-                        response = refine_concept_chat(
-                            st.session_state.concept_messages,
-                            author_identity,
-                            author_pain,
-                            api_key,
-                        )
-                        st.session_state.concept_messages.append({"role": "assistant", "content": response})
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"応答取得に失敗しました: {e}")
+            # 修正リクエスト（折りたたみ式）
+            with st.expander("🔧 もっと深掘りしたい・別の角度を試したい"):
+                refine_input = st.text_area(
+                    "AIへのリクエスト",
+                    placeholder="例: 「案3を女性向けにアレンジして」「もう少しスピリチュアル寄りに」",
+                    height=70,
+                    key="concept_refine_input",
+                )
+                if st.button("📨 AIに送る", use_container_width=True, disabled=not refine_input):
+                    st.session_state.concept_messages.append({"role": "user", "content": refine_input})
+                    with st.spinner("考え中..."):
+                        try:
+                            response = refine_concept_chat(
+                                st.session_state.concept_messages,
+                                author_identity,
+                                author_pain,
+                                api_key,
+                            )
+                            st.session_state.concept_messages.append({"role": "assistant", "content": response})
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"応答取得に失敗しました: {e}")
 
-        # 確定したコンセプトを入力
-        if st.session_state.concept_messages:
+            # 確定したコンセプトを入力
             st.markdown("---")
+            st.markdown("### ✅ 決定したコンセプトを記入")
+            st.caption("上のAI提案から気に入ったものを **コピー＆ペーストするか自分の言葉で書き直して** ください。これがリサーチと記事生成のベースになります。")
             concept = st.text_area(
-                "✅ 上の会話で決まったコンセプトをここに記入してリサーチに進みます",
+                "今日書きたいコンセプト（確定版）",
                 placeholder="例: 受け取れない人が抱えている「与え続ける症候群」の正体",
                 height=80,
                 key="finalized_concept",
