@@ -36,6 +36,28 @@ GENRE_TONE = {
 }
 
 
+def _format_plan_instruction(plan: dict | None) -> str:
+    """進め方プランを記事生成への指示文に整形する。"""
+    if not plan:
+        return ""
+
+    evidence_list = "\n".join(f"  - {e}" for e in plan.get("evidence_to_use", []))
+
+    return f"""【★承認済み進め方プラン — 必ずこの方針で書く】
+- 核心メッセージ: {plan.get("main_message", "")}
+- 冒頭フックの方向性: {plan.get("hook_direction", "")}
+- 中核論理・展開: {plan.get("core_argument", "")}
+- 使う素材:
+{evidence_list}
+- 比喩・ストーリー: {plan.get("key_metaphor", "")}
+- 締めくくり: {plan.get("closing_action", "")}
+- 著者プロフィールの活かし方: {plan.get("author_angle", "")}
+- 読後の余韻: {plan.get("expected_impact", "")}
+
+★このプランはユーザーが承認済み。プランの方向性から外れないこと。
+"""
+
+
 def load_knowledge() -> dict[str, str]:
     knowledge = {}
     for f in KNOWLEDGE_DIR.glob("*.md"):
@@ -90,6 +112,7 @@ def generate_article(
     author_identity: str = "",
     author_pain: str = "",
     ctas: list = None,
+    article_plan: dict = None,
 ) -> dict:
     """ONE HACK構成 + ジャンル別トーンで記事を生成。"""
     client = genai.Client(api_key=api_key)
@@ -168,6 +191,8 @@ def generate_article(
 {author_instruction}
 
 {cta_instruction}
+
+{_format_plan_instruction(article_plan)}
 
 【★H→A→C→Kの流れを厳密に守ること。ラベルは出さない★】
 【★文体の禁止事項】

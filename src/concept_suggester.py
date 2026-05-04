@@ -135,3 +135,162 @@ def refine_concept_chat(
     )
 
     return response.text.strip()
+
+
+def generate_article_plan(
+    concept: str,
+    persona: str,
+    research: dict,
+    author_identity: str,
+    author_pain: str,
+    genre: str,
+    tone_aggressive: int,
+    tone_blunt: bool,
+    api_key: str,
+) -> dict:
+    """記事を書く前の進め方プランを生成する。
+
+    リサーチ結果＋全設定を統合し、記事の方向性を1ページで見せる。
+    """
+    client = genai.Client(api_key=api_key)
+
+    evidence_text = ""
+    for i, ev in enumerate(research.get("evidence", []), 1):
+        evidence_text += f"{i}. {ev.get('title', '')} — {ev.get('summary', '')}\n"
+
+    expert_text = ""
+    for eq in research.get("expert_quotes", []):
+        expert_text += f"- {eq.get('expert', '')}: {eq.get('quote', '')}\n"
+
+    tone_text = "優しい" if tone_aggressive <= 50 else "強め"
+    blunt_text = "グサッと言い切る" if tone_blunt else "柔らかく包む"
+
+    prompt = f"""{CONCEPT_SYSTEM}
+
+【記事を書く前の「進め方プラン」を作成してください】
+リサーチが完了しました。記事を書き上げる前に、ユーザーに「この方向性でいきますね」と確認するためのプランを提示します。
+
+【コンセプト】
+{concept}
+
+【ペルソナ】
+{persona}
+
+【著者プロフィール】
+- 発信内容: {author_identity or "（未入力）"}
+- 過去の痛み: {author_pain or "（未入力）"}
+
+【ジャンル】
+{genre}
+
+【トーン】
+{tone_text} / {blunt_text}
+
+【リサーチで集まった素材】
+{evidence_text}
+
+【専門家の知見】
+{expert_text}
+
+【出力するプラン】
+読者（ユーザー）が「うん、これで書いて」と一目で判断できるレベルの、要点を絞った進め方プラン。
+
+JSON形式で以下の項目を含めてください：
+
+- main_message: この記事で伝えたい核心メッセージ（1文・40字以内）
+- hook_direction: 冒頭フックの方向性（どう読者を掴むか・2-3行）
+- core_argument: 記事の中核となる論理・ストーリー展開（3-4行で全体の流れ）
+- evidence_to_use: 使う素材（リサーチから具体的に選ぶ・3-4個）
+- key_metaphor: 使う比喩・ストーリー（1個・印象的なもの）
+- closing_action: 読者に促す行動（締めくくり・1-2行）
+- author_angle: 著者プロフィールをどう活かすか（1-2行・未入力なら省略可）
+- expected_impact: 読者が読み終わった後の感情・気づき（1-2行）
+"""
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "main_message": {"type": "string"},
+            "hook_direction": {"type": "string"},
+            "core_argument": {"type": "string"},
+            "evidence_to_use": {"type": "array", "items": {"type": "string"}},
+            "key_metaphor": {"type": "string"},
+            "closing_action": {"type": "string"},
+            "author_angle": {"type": "string"},
+            "expected_impact": {"type": "string"},
+        },
+        "required": [
+            "main_message",
+            "hook_direction",
+            "core_argument",
+            "evidence_to_use",
+            "key_metaphor",
+            "closing_action",
+            "expected_impact",
+        ],
+    }
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.7,
+            max_output_tokens=2048,
+            response_mime_type="application/json",
+            response_schema=schema,
+        ),
+    )
+
+    return json.loads(response.text)
+
+
+def refine_plan_chat(
+    messages: list[dict],
+    concept: str,
+    persona: str,
+    plan: dict,
+    api_key: str,
+) -> str:
+    """プランへのフィードバックを元に修正案を返す対話応答。"""
+    client = genai.Client(api_key=api_key)
+
+    history_text = ""
+    for m in messages:
+        role = "ユーザー" if m["role"] == "user" else "AI"
+        history_text += f"{role}: {m['content']}\n\n"
+
+    prompt = f"""{CONCEPT_SYSTEM}
+
+【コンセプト】
+{concept}
+
+【ペルソナ】
+{persona}
+
+【現在のプラン】
+- 核心メッセージ: {plan.get("main_message", "")}
+- 冒頭フック: {plan.get("hook_direction", "")}
+- 中核論理: {plan.get("core_argument", "")}
+- 比喩: {plan.get("key_metaphor", "")}
+- 締めくくり: {plan.get("closing_action", "")}
+
+【これまでの会話】
+{history_text}
+
+【タスク】
+ユーザーがプランに対してフィードバックをしています。
+- 修正提案があれば、新しい方向性を簡潔に提示する
+- 「これでOK」「決定」と言われたら、明確に確定の意思を返す
+- 200-400字程度で簡潔に
+"""
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.8,
+            max_output_tokens=2048,
+        ),
+    )
+
+    return response.text.strip()

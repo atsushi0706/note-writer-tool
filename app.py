@@ -12,7 +12,7 @@ from pathlib import Path
 from src.researcher import research_topic
 from src.generator import generate_article
 from src.quality_checker import check_quality
-from src.concept_suggester import suggest_concepts, refine_concept_chat
+from src.concept_suggester import suggest_concepts, refine_concept_chat, generate_article_plan, refine_plan_chat
 
 # --- ページ設定 ---
 st.set_page_config(
@@ -60,6 +60,10 @@ if "concept_messages" not in st.session_state:
     st.session_state.concept_messages = []
 if "concept_suggestions" not in st.session_state:
     st.session_state.concept_suggestions = None
+if "article_plan" not in st.session_state:
+    st.session_state.article_plan = None
+if "plan_messages" not in st.session_state:
+    st.session_state.plan_messages = []
 
 
 # --- ヘッダー ---
@@ -108,6 +112,10 @@ with st.sidebar:
         st.session_state.research = None
         st.session_state.article = None
         st.session_state.quality = None
+        st.session_state.article_plan = None
+        st.session_state.plan_messages = []
+        st.session_state.concept_messages = []
+        st.session_state.concept_suggestions = None
         st.rerun()
 
 
@@ -389,48 +397,135 @@ elif st.session_state.step == 2:
         one_story = st.text_input("ONE story", value=research.get("suggested_one_story", ""))
         one_action = st.text_input("ONE action", value=research.get("suggested_one_action", ""))
 
-    col_back, col_next = st.columns(2)
-    with col_back:
-        if st.button("← 入力に戻る", use_container_width=True):
-            st.session_state.step = 1
-            st.rerun()
+    st.divider()
 
-    with col_next:
-        if st.button("📝 記事を生成する", type="primary", use_container_width=True):
+    # ========== 📋 進め方プラン ==========
+    st.subheader("📋 進め方プラン")
+    st.caption("記事を書く前に「この方向性で進めますね」をAIが提案します。確認してOKなら記事生成へ進みます。")
+
+    approve_clicked = False
+    if st.session_state.article_plan is None:
+        if st.button("🎯 進め方プランを作る", type="primary", use_container_width=True):
             st.session_state.research["suggested_one_idea"] = one_idea
             st.session_state.research["suggested_one_emotion"] = one_emotion
             st.session_state.research["suggested_one_story"] = one_story
             st.session_state.research["suggested_one_action"] = one_action
 
-            with st.spinner("ONE HACK構成で記事を生成中..."):
+            with st.spinner("進め方プランを作成中..."):
                 try:
-                    article = generate_article(
+                    plan = generate_article_plan(
                         concept=st.session_state.concept,
                         persona=st.session_state.persona,
                         research=st.session_state.research,
-                        tone_aggressive=st.session_state.tone_aggressive,
-                        tone_blunt=st.session_state.tone_blunt,
-                        word_count=st.session_state.word_count,
-                        writer_style=st.session_state.writer_style,
-                        api_key=st.session_state.get("_api_key", ""),
-                        genre=st.session_state.get("genre", "psychology"),
                         author_identity=st.session_state.get("author_identity", ""),
                         author_pain=st.session_state.get("author_pain", ""),
-                        ctas=st.session_state.get("ctas", []),
-                    )
-                    st.session_state.article = article
-
-                    quality = check_quality(
-                        title=article.get("title", ""),
-                        body=article.get("body", ""),
-                        concept=st.session_state.concept,
+                        genre=st.session_state.get("genre", "psychology"),
+                        tone_aggressive=st.session_state.tone_aggressive,
+                        tone_blunt=st.session_state.tone_blunt,
                         api_key=st.session_state.get("_api_key", ""),
                     )
-                    st.session_state.quality = quality
-                    st.session_state.step = 3
+                    st.session_state.article_plan = plan
                     st.rerun()
                 except Exception as e:
-                    st.error(f"記事生成に失敗しました: {e}")
+                    st.error(f"プラン作成に失敗しました: {e}")
+    else:
+        plan = st.session_state.article_plan
+
+        # プラン表示
+        with st.container(border=True):
+            st.markdown(f"### 🎯 核心メッセージ\n{plan.get('main_message', '')}")
+            st.markdown(f"### 🪝 冒頭フック\n{plan.get('hook_direction', '')}")
+            st.markdown(f"### 🔑 中核論理・展開\n{plan.get('core_argument', '')}")
+
+            evidence_list = plan.get("evidence_to_use", [])
+            if evidence_list:
+                st.markdown("### 📚 使う素材")
+                for ev in evidence_list:
+                    st.markdown(f"- {ev}")
+
+            st.markdown(f"### 🎨 比喩・ストーリー\n{plan.get('key_metaphor', '')}")
+            st.markdown(f"### 🚪 締めくくり（読者の行動）\n{plan.get('closing_action', '')}")
+
+            if plan.get("author_angle"):
+                st.markdown(f"### 👤 著者プロフィールの活かし方\n{plan.get('author_angle', '')}")
+
+            st.markdown(f"### 💫 読後の余韻\n{plan.get('expected_impact', '')}")
+
+        # チャットでプラン修正
+        with st.expander("💬 プランを修正したい場合（チャット）"):
+            for msg in st.session_state.plan_messages:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+
+            user_msg = st.chat_input("「フックをもっと逆説的に」「比喩を変えて」など")
+            if user_msg:
+                st.session_state.plan_messages.append({"role": "user", "content": user_msg})
+                with st.spinner("修正案を考え中..."):
+                    try:
+                        response = refine_plan_chat(
+                            messages=st.session_state.plan_messages,
+                            concept=st.session_state.concept,
+                            persona=st.session_state.persona,
+                            plan=plan,
+                            api_key=st.session_state.get("_api_key", ""),
+                        )
+                        st.session_state.plan_messages.append({"role": "assistant", "content": response})
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"応答取得に失敗しました: {e}")
+
+        # ボタン
+        col_regen, col_approve = st.columns(2)
+        with col_regen:
+            if st.button("🔄 プランを再生成する", use_container_width=True):
+                st.session_state.article_plan = None
+                st.session_state.plan_messages = []
+                st.rerun()
+        with col_approve:
+            approve_clicked = st.button("✅ このプランで記事を書く", type="primary", use_container_width=True)
+
+    st.divider()
+
+    col_back = st.columns(1)[0]
+    with col_back:
+        if st.button("← 入力に戻る", use_container_width=True):
+            st.session_state.step = 1
+            st.session_state.article_plan = None
+            st.session_state.plan_messages = []
+            st.rerun()
+
+    # 記事生成（プラン承認時のみ実行）
+    if approve_clicked:
+        with st.spinner("ONE HACK構成で記事を生成中..."):
+            try:
+                article = generate_article(
+                    concept=st.session_state.concept,
+                    persona=st.session_state.persona,
+                    research=st.session_state.research,
+                    tone_aggressive=st.session_state.tone_aggressive,
+                    tone_blunt=st.session_state.tone_blunt,
+                    word_count=st.session_state.word_count,
+                    writer_style=st.session_state.writer_style,
+                    api_key=st.session_state.get("_api_key", ""),
+                    genre=st.session_state.get("genre", "psychology"),
+                    author_identity=st.session_state.get("author_identity", ""),
+                    author_pain=st.session_state.get("author_pain", ""),
+                    ctas=st.session_state.get("ctas", []),
+                    article_plan=st.session_state.article_plan,
+                )
+                st.session_state.article = article
+
+                quality = check_quality(
+                    title=article.get("title", ""),
+                    body=article.get("body", ""),
+                    concept=st.session_state.concept,
+                    api_key=st.session_state.get("_api_key", ""),
+                )
+                st.session_state.quality = quality
+                st.session_state.step = 3
+                st.rerun()
+            except Exception as e:
+                st.error(f"記事生成に失敗しました: {e}")
 
 
 # ========================================
@@ -570,6 +665,7 @@ elif st.session_state.step == 3:
                         author_identity=st.session_state.get("author_identity", ""),
                         author_pain=st.session_state.get("author_pain", ""),
                         ctas=st.session_state.get("ctas", []),
+                        article_plan=st.session_state.article_plan,
                     )
                     st.session_state.article = article
                     quality = check_quality(
