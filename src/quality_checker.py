@@ -1,13 +1,24 @@
 """
 品質チェックモジュール — Gemini Flash
 
-生成された記事をONE HACKの基準でチェックし、
-スコアと改善点を返す。
+生成された記事を基準でチェックし、スコアと改善点を返す。
+構造化出力(response_schema)で JSON エラーを防止。
 """
 
 import json
 from google import genai
 from google.genai import types
+
+
+_QUALITY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "score": {"type": "integer"},
+        "issues": {"type": "string"},
+        "suggestion": {"type": "string"},
+    },
+    "required": ["score", "issues", "suggestion"],
+}
 
 
 def check_quality(title: str, body: str, concept: str, api_key: str) -> dict:
@@ -50,8 +61,7 @@ B. 専門家の概念を紹介してから独自解釈に転換
 C. 日常的な比喩で専門用語を翻訳
 D. 読者の前のめり感を引き出すフック
 
-【出力形式】JSONのみ。
-{{"score": 0-100, "passed": true/false, "issues": "問題点", "suggestion": "改善提案"}}
+scoreは0-100の整数、issuesは問題点の文字列、suggestionは改善提案の文字列で返してください。
 """
 
     response = client.models.generate_content(
@@ -59,15 +69,34 @@ D. 読者の前のめり感を引き出すフック
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0.3,
-            max_output_tokens=1000,
+            max_output_tokens=2048,
+            response_mime_type="application/json",
+            response_schema=_QUALITY_SCHEMA,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
 
-    raw = response.text.strip()
-    if "```" in raw:
-        raw = raw.split("```json")[-1].split("```")[0].strip()
+    text = (response.text or "").strip()
+    if not text:
+        raise ValueError("AIから空の応答が返りました。もう一度お試しください。")
 
-    result = json.loads(raw)
+    # JSON補修ロジック
+    try:
+        result = json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            result = json.loads(text, strict=False)
+        except json.JSONDecodeError:
+            # ```json ブロックを抽出
+            import re as _re
+            code_match = _re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text)
+            if code_match:
+                try:
+                    result = json.loads(code_match.group(1), strict=False)
+                except Exception:
+                    raise ValueError("品質チェックの応答を解釈できませんでした。再度お試しください。")
+            else:
+                raise ValueError("品質チェックの応答を解釈できませんでした。再度お試しください。")
+
     result["passed"] = result.get("score", 0) >= 90
-
     return result
