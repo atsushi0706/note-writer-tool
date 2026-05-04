@@ -124,13 +124,16 @@ with st.expander("📖 はじめての方へ｜このツールの使い方", exp
 
 ---
 
-### 📝 全体の流れ（3ステップ）
+### 📝 全体の流れ（3ステップ・最短2クリック）
 
-| Step | やること | 所要時間 |
+| Step | やること | API回数 |
 |---|---|---|
-| **① 入力** | プロフィール → コンセプト → ペルソナ → 設定を入力 | 5分 |
-| **② リサーチ + プラン確認** | AIが海外を検索 → 「こんな方向性で書きますね」を確認 | 1〜2分待つ |
-| **③ 記事完成** | 約2,000字の記事ができる → コピーしてnoteに貼り付け | 1分 |
+| **① 入力** | プロフィール → コンセプト（自分で書くor AI相談） → ペルソナ → 設定 | コンセプトAI相談時のみ +1〜N回 |
+| **② リサーチ → 記事生成** | 「📝 すぐに記事を書く」で1クリック完結 | **2回**（リサーチ+記事生成）|
+| **③ 記事完成** | 完成 → コピーしてnoteに貼り付け | 0回（品質チェックは任意で+1回）|
+
+> 💡 **最小コース: 2回のAPI呼び出しで記事完成**
+> プラン確認・コンセプト相談・品質チェックは任意（API追加消費）。Geminiの無料枠を節約したい場合は、これらをスキップしてください。
 
 ---
 
@@ -541,90 +544,81 @@ elif st.session_state.step == 2:
 
     st.divider()
 
-    # ========== 📋 進め方プラン ==========
-    st.subheader("📋 進め方プラン")
-    st.caption("記事を書く前に「この方向性で進めますね」をAIが提案します。確認してOKなら記事生成へ進みます。")
+    # ========== 🚀 すぐに記事を生成（推奨） ==========
+    st.subheader("🚀 記事を生成する")
+    st.caption("**推奨：API節約モード** プランをスキップして1クリックで記事を生成します（API呼び出し1回）。")
 
+    quick_clicked = False
+    if st.button("📝 すぐに記事を書く（プランをスキップ）", type="primary", use_container_width=True, key="quick_generate"):
+        st.session_state.research["suggested_one_idea"] = one_idea
+        st.session_state.research["suggested_one_emotion"] = one_emotion
+        st.session_state.research["suggested_one_story"] = one_story
+        st.session_state.research["suggested_one_action"] = one_action
+        st.session_state.article_plan = None
+        quick_clicked = True
+
+    st.divider()
+
+    # ========== 📋 進め方プラン（任意・API追加消費） ==========
     approve_clicked = False
-    if st.session_state.article_plan is None:
-        if st.button("🎯 進め方プランを作る", type="primary", use_container_width=True):
-            st.session_state.research["suggested_one_idea"] = one_idea
-            st.session_state.research["suggested_one_emotion"] = one_emotion
-            st.session_state.research["suggested_one_story"] = one_story
-            st.session_state.research["suggested_one_action"] = one_action
+    with st.expander("📋 進め方プランを確認してから書きたい場合（API追加消費）"):
+        st.caption("記事を書く前に「この方向性で進めますね」をAIが提案します。プラン作成で+1回、修正チャットで+N回のAPIを使います。")
 
-            with st.spinner("進め方プランを作成中..."):
-                try:
-                    plan = generate_article_plan(
-                        concept=st.session_state.concept,
-                        persona=st.session_state.persona,
-                        research=st.session_state.research,
-                        author_identity=st.session_state.get("author_identity", ""),
-                        author_pain=st.session_state.get("author_pain", ""),
-                        genre=st.session_state.get("genre", "psychology"),
-                        tone_aggressive=st.session_state.tone_aggressive,
-                        tone_blunt=st.session_state.tone_blunt,
-                        api_key=st.session_state.get("_api_key", ""),
-                    )
-                    st.session_state.article_plan = plan
-                    st.rerun()
-                except Exception as e:
-                    show_friendly_error(e, "プラン作成")
-    else:
-        plan = st.session_state.article_plan
+        if st.session_state.article_plan is None:
+            if st.button("🎯 進め方プランを作る", use_container_width=True):
+                st.session_state.research["suggested_one_idea"] = one_idea
+                st.session_state.research["suggested_one_emotion"] = one_emotion
+                st.session_state.research["suggested_one_story"] = one_story
+                st.session_state.research["suggested_one_action"] = one_action
 
-        # プラン表示
-        with st.container(border=True):
-            st.markdown(f"### 🎯 核心メッセージ\n{plan.get('main_message', '')}")
-            st.markdown(f"### 🪝 冒頭フック\n{plan.get('hook_direction', '')}")
-            st.markdown(f"### 🔑 中核論理・展開\n{plan.get('core_argument', '')}")
-
-            evidence_list = plan.get("evidence_to_use", [])
-            if evidence_list:
-                st.markdown("### 📚 使う素材")
-                for ev in evidence_list:
-                    st.markdown(f"- {ev}")
-
-            st.markdown(f"### 🎨 比喩・ストーリー\n{plan.get('key_metaphor', '')}")
-            st.markdown(f"### 🚪 締めくくり（読者の行動）\n{plan.get('closing_action', '')}")
-
-            if plan.get("author_angle"):
-                st.markdown(f"### 👤 著者プロフィールの活かし方\n{plan.get('author_angle', '')}")
-
-            st.markdown(f"### 💫 読後の余韻\n{plan.get('expected_impact', '')}")
-
-        # チャットでプラン修正
-        with st.expander("💬 プランを修正したい場合（チャット）"):
-            for msg in st.session_state.plan_messages:
-                with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
-
-            user_msg = st.chat_input("「フックをもっと逆説的に」「比喩を変えて」など")
-            if user_msg:
-                st.session_state.plan_messages.append({"role": "user", "content": user_msg})
-                with st.spinner("修正案を考え中..."):
+                with st.spinner("進め方プランを作成中..."):
                     try:
-                        response = refine_plan_chat(
-                            messages=st.session_state.plan_messages,
+                        plan = generate_article_plan(
                             concept=st.session_state.concept,
                             persona=st.session_state.persona,
-                            plan=plan,
+                            research=st.session_state.research,
+                            author_identity=st.session_state.get("author_identity", ""),
+                            author_pain=st.session_state.get("author_pain", ""),
+                            genre=st.session_state.get("genre", "psychology"),
+                            tone_aggressive=st.session_state.tone_aggressive,
+                            tone_blunt=st.session_state.tone_blunt,
                             api_key=st.session_state.get("_api_key", ""),
                         )
-                        st.session_state.plan_messages.append({"role": "assistant", "content": response})
+                        st.session_state.article_plan = plan
                         st.rerun()
                     except Exception as e:
-                        show_friendly_error(e, "応答取得")
+                        show_friendly_error(e, "プラン作成")
+        else:
+            plan = st.session_state.article_plan
 
-        # ボタン
-        col_regen, col_approve = st.columns(2)
-        with col_regen:
-            if st.button("🔄 プランを再生成する", use_container_width=True):
-                st.session_state.article_plan = None
-                st.session_state.plan_messages = []
-                st.rerun()
-        with col_approve:
-            approve_clicked = st.button("✅ このプランで記事を書く", type="primary", use_container_width=True)
+            with st.container(border=True):
+                st.markdown(f"### 🎯 核心メッセージ\n{plan.get('main_message', '')}")
+                st.markdown(f"### 🪝 冒頭フック\n{plan.get('hook_direction', '')}")
+                st.markdown(f"### 🔑 中核論理・展開\n{plan.get('core_argument', '')}")
+
+                evidence_list = plan.get("evidence_to_use", [])
+                if evidence_list:
+                    st.markdown("### 📚 使う素材")
+                    for ev in evidence_list:
+                        st.markdown(f"- {ev}")
+
+                st.markdown(f"### 🎨 比喩・ストーリー\n{plan.get('key_metaphor', '')}")
+                st.markdown(f"### 🚪 締めくくり（読者の行動）\n{plan.get('closing_action', '')}")
+
+                if plan.get("author_angle"):
+                    st.markdown(f"### 👤 著者プロフィールの活かし方\n{plan.get('author_angle', '')}")
+
+                st.markdown(f"### 💫 読後の余韻\n{plan.get('expected_impact', '')}")
+
+            # ボタン
+            col_regen, col_approve = st.columns(2)
+            with col_regen:
+                if st.button("🔄 プランを再生成する", use_container_width=True):
+                    st.session_state.article_plan = None
+                    st.session_state.plan_messages = []
+                    st.rerun()
+            with col_approve:
+                approve_clicked = st.button("✅ このプランで記事を書く", type="primary", use_container_width=True)
 
     st.divider()
 
@@ -636,8 +630,8 @@ elif st.session_state.step == 2:
             st.session_state.plan_messages = []
             st.rerun()
 
-    # 記事生成（プラン承認時のみ実行）
-    if approve_clicked:
+    # 記事生成（クイック or プラン承認時に実行）
+    if quick_clicked or approve_clicked:
         with st.spinner("ONE HACK構成で記事を生成中..."):
             try:
                 article = generate_article(
@@ -656,14 +650,7 @@ elif st.session_state.step == 2:
                     article_plan=st.session_state.article_plan,
                 )
                 st.session_state.article = article
-
-                quality = check_quality(
-                    title=article.get("title", ""),
-                    body=article.get("body", ""),
-                    concept=st.session_state.concept,
-                    api_key=st.session_state.get("_api_key", ""),
-                )
-                st.session_state.quality = quality
+                st.session_state.quality = None  # 品質チェックは任意（Step3でボタン化）
                 st.session_state.step = 3
                 st.rerun()
             except Exception as e:
@@ -678,20 +665,36 @@ elif st.session_state.step == 3:
     article = st.session_state.article
     quality = st.session_state.quality
 
-    # 品質スコア
-    score = quality.get("score", 0) if quality else 0
-    col_score, col_info = st.columns([1, 3])
-    with col_score:
-        if score >= 90:
-            st.markdown(f'<div class="score-high">{score}点</div>', unsafe_allow_html=True)
-        elif score >= 70:
-            st.markdown(f'<div class="score-mid">{score}点</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="score-low">{score}点</div>', unsafe_allow_html=True)
-        st.caption("品質スコア")
+    # 品質チェック（任意・API追加消費）
+    if quality is None:
+        with st.expander("✅ 品質チェックする（任意・API追加消費）"):
+            st.caption("AIが記事の品質を100点満点でスコアリングします。問題点・改善提案も表示。API +1回。")
+            if st.button("品質チェックを実行", use_container_width=True):
+                with st.spinner("品質チェック中..."):
+                    try:
+                        q = check_quality(
+                            title=article.get("title", ""),
+                            body=article.get("body", ""),
+                            concept=st.session_state.concept,
+                            api_key=st.session_state.get("_api_key", ""),
+                        )
+                        st.session_state.quality = q
+                        st.rerun()
+                    except Exception as e:
+                        show_friendly_error(e, "品質チェック")
+    else:
+        score = quality.get("score", 0)
+        col_score, col_info = st.columns([1, 3])
+        with col_score:
+            if score >= 90:
+                st.markdown(f'<div class="score-high">{score}点</div>', unsafe_allow_html=True)
+            elif score >= 70:
+                st.markdown(f'<div class="score-mid">{score}点</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="score-low">{score}点</div>', unsafe_allow_html=True)
+            st.caption("品質スコア")
 
-    with col_info:
-        if quality:
+        with col_info:
             if quality.get("passed"):
                 st.success("品質チェック通過！")
             else:
@@ -759,7 +762,7 @@ elif st.session_state.step == 3:
             "title": edited_title,
             "body": edited_body,
             "tags": tags,
-            "quality_score": score,
+            "quality_score": quality.get("score", 0) if quality else None,
         }, ensure_ascii=False, indent=2)
         st.download_button(
             "💾 JSONでダウンロード",
