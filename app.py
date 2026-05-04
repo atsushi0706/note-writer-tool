@@ -344,8 +344,6 @@ if st.session_state.step == 1:
                     st.session_state.concept = concept
                     st.session_state.persona = persona
                     st.session_state.genre = genre
-                    st.session_state.author_identity = author_identity
-                    st.session_state.author_pain = author_pain
                     st.session_state.ctas = ctas
                     st.session_state.tone_aggressive = tone_aggressive
                     st.session_state.tone_blunt = tone_blunt == "グサッと言い切る"
