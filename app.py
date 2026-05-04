@@ -11,7 +11,6 @@ from pathlib import Path
 
 from src.researcher import research_topic
 from src.generator import generate_article
-from src.quality_checker import check_quality
 from src.concept_suggester import suggest_concepts, refine_concept_chat, generate_article_plan, refine_plan_chat
 
 # --- ページ設定 ---
@@ -78,8 +77,6 @@ if "research" not in st.session_state:
     st.session_state.research = None
 if "article" not in st.session_state:
     st.session_state.article = None
-if "quality" not in st.session_state:
-    st.session_state.quality = None
 if "concept_messages" not in st.session_state:
     st.session_state.concept_messages = []
 if "concept_suggestions" not in st.session_state:
@@ -130,10 +127,10 @@ with st.expander("📖 はじめての方へ｜このツールの使い方", exp
 |---|---|---|
 | **① 入力** | プロフィール → コンセプト（自分で書くor AI相談） → ペルソナ → 設定 | コンセプトAI相談時のみ +1〜N回 |
 | **② リサーチ → 記事生成** | 「📝 すぐに記事を書く」で1クリック完結 | **2回**（リサーチ+記事生成）|
-| **③ 記事完成** | 完成 → コピーしてnoteに貼り付け | 0回（品質チェックは任意で+1回）|
+| **③ 記事完成** | 完成 → コピーしてnoteに貼り付け | 0回 |
 
 > 💡 **最小コース: 2回のAPI呼び出しで記事完成**
-> プラン確認・コンセプト相談・品質チェックは任意（API追加消費）。Geminiの無料枠を節約したい場合は、これらをスキップしてください。
+> プラン確認・コンセプト相談は任意（API追加消費）。Geminiの無料枠を節約したい場合は、これらをスキップしてください。
 
 ---
 
@@ -223,7 +220,6 @@ with st.sidebar:
         st.session_state.step = 1
         st.session_state.research = None
         st.session_state.article = None
-        st.session_state.quality = None
         st.session_state.article_plan = None
         st.session_state.plan_messages = []
         st.session_state.concept_messages = []
@@ -650,7 +646,6 @@ elif st.session_state.step == 2:
                     article_plan=st.session_state.article_plan,
                 )
                 st.session_state.article = article
-                st.session_state.quality = None  # 品質チェックは任意（Step3でボタン化）
                 st.session_state.step = 3
                 st.rerun()
             except Exception as e:
@@ -663,43 +658,6 @@ elif st.session_state.step == 2:
 elif st.session_state.step == 3:
     st.header("③ 記事完成")
     article = st.session_state.article
-    quality = st.session_state.quality
-
-    # 品質チェック（任意・API追加消費）
-    if quality is None:
-        with st.expander("✅ 品質チェックする（任意・API追加消費）"):
-            st.caption("AIが記事の品質を100点満点でスコアリングします。問題点・改善提案も表示。API +1回。")
-            if st.button("品質チェックを実行", use_container_width=True):
-                with st.spinner("品質チェック中..."):
-                    try:
-                        q = check_quality(
-                            title=article.get("title", ""),
-                            body=article.get("body", ""),
-                            concept=st.session_state.concept,
-                            api_key=st.session_state.get("_api_key", ""),
-                        )
-                        st.session_state.quality = q
-                        st.rerun()
-                    except Exception as e:
-                        show_friendly_error(e, "品質チェック")
-    else:
-        score = quality.get("score", 0)
-        col_score, col_info = st.columns([1, 3])
-        with col_score:
-            if score >= 90:
-                st.markdown(f'<div class="score-high">{score}点</div>', unsafe_allow_html=True)
-            elif score >= 70:
-                st.markdown(f'<div class="score-mid">{score}点</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="score-low">{score}点</div>', unsafe_allow_html=True)
-            st.caption("品質スコア")
-
-        with col_info:
-            if quality.get("passed"):
-                st.success("品質チェック通過！")
-            else:
-                st.warning(f"改善の余地あり: {quality.get('issues', '')}")
-                st.caption(f"提案: {quality.get('suggestion', '')}")
 
     st.divider()
 
@@ -762,7 +720,6 @@ elif st.session_state.step == 3:
             "title": edited_title,
             "body": edited_body,
             "tags": tags,
-            "quality_score": quality.get("score", 0) if quality else None,
         }, ensure_ascii=False, indent=2)
         st.download_button(
             "💾 JSONでダウンロード",
@@ -813,13 +770,6 @@ elif st.session_state.step == 3:
                         article_plan=st.session_state.article_plan,
                     )
                     st.session_state.article = article
-                    quality = check_quality(
-                        title=article.get("title", ""),
-                        body=article.get("body", ""),
-                        concept=st.session_state.concept,
-                        api_key=st.session_state.get("_api_key", ""),
-                    )
-                    st.session_state.quality = quality
                     st.rerun()
                 except Exception as e:
                     show_friendly_error(e, "再生成")
