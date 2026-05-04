@@ -473,14 +473,39 @@ elif st.session_state.step == 2:
                 if uri:
                     st.markdown(f"- [{title or uri}]({uri})")
 
-    st.subheader("ONE HACK要素（編集可能）")
+    st.subheader("🎯 記事の4つの軸（編集可能）")
+    st.caption("**1記事に「1つだけ」を貫く設計です。** 下の4つを書き換えると記事の方向性が変わります。AIが提案した値が入っていますが、自由に編集できます。")
+
     col1, col2 = st.columns(2)
     with col1:
-        one_idea = st.text_input("ONE idea", value=research.get("suggested_one_idea", ""))
-        one_emotion = st.text_input("ONE emotion", value=research.get("suggested_one_emotion", ""))
+        one_idea = st.text_input(
+            "💡 1つのアイデア（記事で伝える唯一のメッセージ）",
+            value=research.get("suggested_one_idea", ""),
+            help="変えると記事の主題そのものが変わります。例: 「自己投資の本質はお金ではなく時間」",
+        )
+        st.caption("→ ここを変えると **記事の核心メッセージ** が変わる")
+
+        one_emotion = st.text_input(
+            "💗 1つの感情（読者に呼び起こす感情）",
+            value=research.get("suggested_one_emotion", ""),
+            help="変えると記事の温度感が変わる。例: 安心 / 焦り / 共感 / 怒り / 希望",
+        )
+        st.caption("→ ここを変えると **読者が記事を読んで感じる感情** が変わる")
+
     with col2:
-        one_story = st.text_input("ONE story", value=research.get("suggested_one_story", ""))
-        one_action = st.text_input("ONE action", value=research.get("suggested_one_action", ""))
+        one_story = st.text_input(
+            "📖 1つのストーリー（使う比喩・物語）",
+            value=research.get("suggested_one_story", ""),
+            help="変えると記事の例え・例示が変わる。例: 「料理の味付け」「マラソンの走り方」",
+        )
+        st.caption("→ ここを変えると **記事の中で使われる比喩** が変わる")
+
+        one_action = st.text_input(
+            "🎯 1つの行動（読者に促す行動）",
+            value=research.get("suggested_one_action", ""),
+            help="変えると記事の締めくくりが変わる。例: 「今日の出来事を1つ書き出す」",
+        )
+        st.caption("→ ここを変えると **記事の最後に読者に促す行動** が変わる")
 
     st.divider()
 

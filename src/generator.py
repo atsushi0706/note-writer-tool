@@ -36,6 +36,61 @@ GENRE_TONE = {
 }
 
 
+def _parse_article_json(text: str) -> dict:
+    """記事生成のJSONレスポンスを補修してパースする。
+
+    Geminiの構造化出力でも稀にJSONが壊れることがあるため、
+    複数段階で補修を試みる。
+    """
+    import re as _re
+
+    # 1. そのままパース
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. strict=Falseで再試行（制御文字を許容）
+    try:
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError:
+        pass
+
+    # 3. ```json ブロックの中身だけ抽出
+    code_match = _re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text)
+    if code_match:
+        inner = code_match.group(1)
+        try:
+            return json.loads(inner, strict=False)
+        except json.JSONDecodeError:
+            pass
+
+    # 4. title/body/tagsを正規表現で個別に抽出（最終手段）
+    title_match = _re.search(r'"title"\s*:\s*"((?:[^"\\]|\\.)*)"', text, _re.DOTALL)
+    body_match = _re.search(r'"body"\s*:\s*"((?:[^"\\]|\\.)*)"', text, _re.DOTALL)
+    tags_match = _re.search(r'"tags"\s*:\s*\[(.*?)\]', text, _re.DOTALL)
+
+    if title_match and body_match:
+        try:
+            title = json.loads(f'"{title_match.group(1)}"')
+            body = json.loads(f'"{body_match.group(1)}"')
+        except Exception:
+            title = title_match.group(1).replace("\\n", "\n").replace('\\"', '"')
+            body = body_match.group(1).replace("\\n", "\n").replace('\\"', '"')
+
+        tags = []
+        if tags_match:
+            for m in _re.findall(r'"((?:[^"\\]|\\.)*)"', tags_match.group(1)):
+                tags.append(m.replace("\\n", "\n").replace('\\"', '"'))
+
+        return {"title": title, "body": body, "tags": tags}
+
+    raise ValueError(
+        "AIの応答からJSONを取り出せませんでした。"
+        "もう一度お試しください。続く場合は文字数を減らしてみてください。"
+    )
+
+
 def _format_plan_instruction(plan: dict | None) -> str:
     """進め方プランを記事生成への指示文に整形する。"""
     if not plan:
@@ -241,10 +296,21 @@ K（Key）: 小さな一歩を提案して着地。
             max_output_tokens=8192,
             response_mime_type="application/json",
             response_schema=_ARTICLE_SCHEMA,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
 
-    result = json.loads(response.text)
+    text = (response.text or "").strip()
+    if not text:
+        finish_reason = ""
+        if response.candidates:
+            finish_reason = str(response.candidates[0].finish_reason)
+        raise ValueError(
+            f"AIから空の応答が返りました（finish_reason={finish_reason}）。"
+            "もう一度お試しください。続く場合は文字数を減らすか、コンセプトを短くしてください。"
+        )
+
+    result = _parse_article_json(text)
     result["one_hack"] = {
         "idea": research.get("suggested_one_idea", ""),
         "emotion": research.get("suggested_one_emotion", ""),
