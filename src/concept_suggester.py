@@ -36,23 +36,31 @@ def suggest_concepts(author_identity: str, author_pain: str, api_key: str, n: in
     """発信者プロフィールから note記事コンセプトを n個提案する。"""
     client = genai.Client(api_key=api_key)
 
-    user_prompt = f"""【発信者プロフィール】
-- 発信内容: {author_identity or "（未入力）"}
-- 過去の痛み: {author_pain or "（未入力）"}
+    user_prompt = f"""【発信者プロフィール — これを必ず深く読み込んで提案する】
+■ 発信内容（あなたは何者か）:
+{author_identity or "（未入力）"}
 
-このプロフィールから、note記事のコンセプト案を{n}個提案してください。
+■ 過去の痛み（自分が乗り越えてきた経験）:
+{author_pain or "（未入力）"}
+
+【★最重要ルール★】
+上記プロフィールから「この人だからこそ書ける記事」を{n}個提案してください。
+- 発信内容に書かれている領域（テーマ・読者層）から外れない
+- 過去の痛みを起点にしたコンセプトを必ず2個以上含める
+- プロフィールにある具体的なキーワード・職業・体験を、各コンセプトのいずれかに反映する
+- 汎用的で誰でも書けるテーマは禁止。この人ならではの切り口にする
 
 各コンセプトには以下を含める:
 - title: 30文字以内のキャッチーなコンセプト名（具体的・逆説的）
 - hook: なぜこれが刺さるか（1-2行・感情を動かす理由）
 - target_pain: ターゲットが抱える具体的な痛み（「Zoomで固まる」レベルの解像度）
 - promise: 記事を読んだ後に得られるもの
-- why_unique: 既存の発信と何が違うか（独自性・切り口）
+- why_unique: この発信者だからこそ書ける独自性（プロフィールのどこと繋がるか）
 
 【絶対NG】
 - 抽象的なタイトル（「自分らしさ」「心を整える」「マインドセット」等）
-- ありきたりなテーマ（既に飽和したもの）
-- 発信者プロフィールと無関係な汎用提案
+- 発信者プロフィールと関係ない汎用提案
+- 過去の痛みを完全に無視した提案
 """
 
     schema = {
@@ -75,13 +83,25 @@ def suggest_concepts(author_identity: str, author_pain: str, api_key: str, n: in
         contents=CONCEPT_SYSTEM + "\n\n" + user_prompt,
         config=types.GenerateContentConfig(
             temperature=0.9,
-            max_output_tokens=4096,
+            max_output_tokens=8192,
             response_mime_type="application/json",
             response_schema=schema,
         ),
     )
 
-    return json.loads(response.text)
+    text = (response.text or "").strip()
+    if not text:
+        raise ValueError("AIから空の応答が返りました。もう一度試してください。")
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        # JSONが切れている場合のフォールバック: 末尾を切って閉じカッコを補う
+        truncated = text.rsplit("}", 1)[0] + "}]"
+        try:
+            return json.loads(truncated)
+        except Exception:
+            raise ValueError(f"AIの応答が途切れました。再度お試しください。詳細: {e}")
 
 
 def refine_concept_chat(
@@ -235,13 +255,20 @@ JSON形式で以下の項目を含めてください：
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0.7,
-            max_output_tokens=2048,
+            max_output_tokens=4096,
             response_mime_type="application/json",
             response_schema=schema,
         ),
     )
 
-    return json.loads(response.text)
+    text = (response.text or "").strip()
+    if not text:
+        raise ValueError("AIから空の応答が返りました。もう一度試してください。")
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"AIの応答が途切れました。再度お試しください。詳細: {e}")
 
 
 def refine_plan_chat(

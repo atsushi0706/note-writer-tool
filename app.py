@@ -148,7 +148,7 @@ if st.session_state.step == 1:
 
     concept_mode = st.radio(
         "コンセプトの決め方",
-        ["💡 AIに相談しながら決める（神田昌典・ダイレクト出版視点）", "✍️ 自分で入力する"],
+        ["💡 AIに相談しながら決める（プロのコピーライティング視点）", "✍️ 自分で入力する"],
         index=0,
         horizontal=False,
     )
@@ -163,7 +163,9 @@ if st.session_state.step == 1:
         )
     else:
         # AI相談モード
-        st.caption("プロフィールを入力 → 「コンセプト案を出す」ボタン → 気になる案があればそのまま採用 or チャットで深掘り")
+        st.caption("👆 上のプロフィール（発信内容＋過去の痛み）を元にコンセプトが提案されます。")
+        if not author_identity:
+            st.warning("⚠️ プロフィールの「発信内容」を入力してから提案ボタンを押してください。プロフィールが空だと一般的な提案になります。")
 
         # 初回提案ボタン
         col_btn1, col_btn2 = st.columns(2)
@@ -173,7 +175,7 @@ if st.session_state.step == 1:
                 use_container_width=True,
                 disabled=not (api_key and author_identity),
             ):
-                with st.spinner("神田昌典・ダイレクト出版視点でコンセプトを練っています..."):
+                with st.spinner("プロのコピーライター視点でコンセプトを練っています..."):
                     try:
                         suggestions = suggest_concepts(author_identity, author_pain, api_key)
                         st.session_state.concept_suggestions = suggestions
