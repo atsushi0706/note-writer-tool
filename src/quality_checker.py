@@ -80,23 +80,50 @@ scoreは0-100の整数、issuesは問題点の文字列、suggestionは改善提
     if not text:
         raise ValueError("AIから空の応答が返りました。もう一度お試しください。")
 
-    # JSON補修ロジック
-    try:
-        result = json.loads(text)
-    except json.JSONDecodeError:
-        try:
-            result = json.loads(text, strict=False)
-        except json.JSONDecodeError:
-            # ```json ブロックを抽出
-            import re as _re
-            code_match = _re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text)
-            if code_match:
-                try:
-                    result = json.loads(code_match.group(1), strict=False)
-                except Exception:
-                    raise ValueError("品質チェックの応答を解釈できませんでした。再度お試しください。")
-            else:
-                raise ValueError("品質チェックの応答を解釈できませんでした。再度お試しください。")
-
+    result = _parse_quality(text)
     result["passed"] = result.get("score", 0) >= 90
     return result
+
+
+def _parse_quality(text: str) -> dict:
+    """品質チェックのJSON応答を補修してパースする。
+
+    完全に壊れていてもスコアだけは正規表現で抽出するフォールバックを持つ。
+    """
+    import re as _re
+
+    # 1. 直接パース
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. strict=False
+    try:
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError:
+        pass
+
+    # 3. コードブロック抽出
+    code_match = _re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text)
+    if code_match:
+        try:
+            return json.loads(code_match.group(1), strict=False)
+        except Exception:
+            pass
+
+    # 4. 最終手段: スコア・issues・suggestionを正規表現で個別抽出
+    score_match = _re.search(r'"score"\s*:\s*(\d+)', text)
+    issues_match = _re.search(r'"issues"\s*:\s*"((?:[^"\\]|\\.)*)"', text, _re.DOTALL)
+    suggestion_match = _re.search(r'"suggestion"\s*:\s*"((?:[^"\\]|\\.)*)"', text, _re.DOTALL)
+
+    if score_match:
+        return {
+            "score": int(score_match.group(1)),
+            "issues": (issues_match.group(1).replace("\\n", "\n").replace('\\"', '"')
+                       if issues_match else "JSON応答が一部壊れていましたが、スコアは取得できました。"),
+            "suggestion": (suggestion_match.group(1).replace("\\n", "\n").replace('\\"', '"')
+                           if suggestion_match else ""),
+        }
+
+    raise ValueError("品質チェックの応答を解釈できませんでした。再度お試しください。")
