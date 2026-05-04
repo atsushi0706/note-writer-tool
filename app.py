@@ -47,6 +47,30 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# --- エラーハンドリング ---
+def show_friendly_error(e: Exception, context: str = "処理"):
+    """Gemini APIのエラーをユーザーに分かりやすく表示する。"""
+    err_str = str(e)
+    if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str or "quota" in err_str.lower():
+        st.error(
+            f"⚠️ **Geminiの1日の無料枠を使い切りました**\n\n"
+            f"無料プランの1日あたりリクエスト数の上限に達しています。\n\n"
+            f"**解決策（どれか1つ）:**\n"
+            f"1. **24時間待つ** → 翌日に自動でリセットされます\n"
+            f"2. **別のGoogleアカウントで新しいAPI Keyを作る** → "
+            f"[Google AI Studio](https://aistudio.google.com/apikey) で別アカウントから取得\n"
+            f"3. **記事生成前のステップ（コンセプト相談・プラン）を減らす** → 一発で記事生成に進む"
+        )
+    elif "API key" in err_str or "API_KEY" in err_str:
+        st.error(
+            f"⚠️ **APIキーが正しくありません**\n\n"
+            f"左サイドバーのGemini API Keyを確認してください。"
+            f"[取得マニュアル](https://github.com/atsushi0706/note-writer-tool/blob/master/docs/GEMINI_API_KEY_GUIDE.md)"
+        )
+    else:
+        st.error(f"{context}に失敗しました: {e}")
+
+
 # --- セッション初期化 ---
 if "step" not in st.session_state:
     st.session_state.step = 1  # 1: 入力, 2: リサーチ結果, 3: 記事プレビュー
@@ -277,7 +301,7 @@ if st.session_state.step == 1:
                         ]
                         st.rerun()
                     except Exception as e:
-                        st.error(f"提案に失敗しました: {e}")
+                        show_friendly_error(e, "提案")
         with col_btn2:
             if st.button("🔄 チャットをリセット", use_container_width=True):
                 st.session_state.concept_messages = []
@@ -313,7 +337,7 @@ if st.session_state.step == 1:
                             st.session_state.concept_messages.append({"role": "assistant", "content": response})
                             st.rerun()
                         except Exception as e:
-                            st.error(f"応答取得に失敗しました: {e}")
+                            show_friendly_error(e, "応答取得")
 
             # 確定したコンセプトを入力
             st.markdown("---")
@@ -445,7 +469,7 @@ if st.session_state.step == 1:
                     st.session_state.step = 2
                     st.rerun()
                 except Exception as e:
-                    st.error(f"リサーチに失敗しました: {e}")
+                    show_friendly_error(e, "リサーチ")
 
 
 # ========================================
@@ -545,7 +569,7 @@ elif st.session_state.step == 2:
                     st.session_state.article_plan = plan
                     st.rerun()
                 except Exception as e:
-                    st.error(f"プラン作成に失敗しました: {e}")
+                    show_friendly_error(e, "プラン作成")
     else:
         plan = st.session_state.article_plan
 
@@ -590,7 +614,7 @@ elif st.session_state.step == 2:
                         st.session_state.plan_messages.append({"role": "assistant", "content": response})
                         st.rerun()
                     except Exception as e:
-                        st.error(f"応答取得に失敗しました: {e}")
+                        show_friendly_error(e, "応答取得")
 
         # ボタン
         col_regen, col_approve = st.columns(2)
@@ -643,7 +667,7 @@ elif st.session_state.step == 2:
                 st.session_state.step = 3
                 st.rerun()
             except Exception as e:
-                st.error(f"記事生成に失敗しました: {e}")
+                show_friendly_error(e, "記事生成")
 
 
 # ========================================
@@ -795,4 +819,4 @@ elif st.session_state.step == 3:
                     st.session_state.quality = quality
                     st.rerun()
                 except Exception as e:
-                    st.error(f"再生成に失敗しました: {e}")
+                    show_friendly_error(e, "再生成")
